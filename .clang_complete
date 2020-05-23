@@ -1,0 +1,4 @@
+-DDEBUG
+-I ./include
+-I ./src
+-I /usr/include/
