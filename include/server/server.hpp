@@ -7,7 +7,7 @@
 
 class Server {
  public:
-  Server();
+  Server(std::string workDir);
   ~Server();
   void bind(short port);
   void listen();
@@ -18,6 +18,7 @@ class Server {
   int m_sockfd;
   bool readyToAccept = true;
   std::vector<std::thread> m_threads;
+  std::string m_workDir;
 };
 
 #endif // SERVER_H

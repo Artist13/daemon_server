@@ -2,7 +2,7 @@
 
 int main(int argc, char const *argv[])
 {
-  Server local;
+  Server local("/var/log/");
   local.bind(5999);
   local.listen();
 

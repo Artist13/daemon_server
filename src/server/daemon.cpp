@@ -10,13 +10,22 @@
 #include <sys/resource.h>
 #include <wait.h>
 #include <string.h>
+#include <thread>
+#include <vector>
+
+#include "server/server.hpp"
 
 static const std::string PID_FILE = "/var/run/my_daemon.pid";
+// daemon exit statuses
 const int CHILD_NEED_WORK = 1;
 const int CHILD_NEED_TERMINATE = 2;
 const int FD_LIMIT = 1024 * 10;
 
 static const std::string pathToLog = "/var/log/my_daemon.log";
+// path to output file
+static std::string filepath;
+// thread with server 
+static std::thread th;
 
 void writeToLog(std::string msg) {
   std::ofstream log(pathToLog, std::ios::out | std::ios::app);
@@ -24,10 +33,25 @@ void writeToLog(std::string msg) {
 }
 
 void usage() {
-  // TODO: need i this cfg?
   std::cout << "Usage: daemon filename.cfg" << std::endl;
 }
 
+void unlink(const std::string& file) {
+  unlink(file.c_str());
+}
+
+// helper func to prepare sigset
+void prepareSignals(sigset_t& sigset, const std::vector<int>& signals) {
+  sigemptyset(&sigset);
+
+  for (auto signal : signals) {
+    sigaddset(&sigset, signal);
+  }
+
+  sigprocmask(SIG_BLOCK, &sigset, NULL);
+}
+
+// prepare env after fork
 void clearChildEnv() {
   umask(0);
   pid_t sid = setsid();
@@ -44,13 +68,29 @@ void clearChildEnv() {
   close(STDERR_FILENO);
 }
 // daemon control process code
-int headWork();
+int monitorStart();
 // daemon main process code
-int mainWork();
+int daemonStart();
 
-// mock for config loading
 int loadConfig(char *filename) {
+  std::ifstream cfg(filename, std::ios::in);
+  // read from config only dir where would place output
+  cfg >> filepath;
   return 0;
+}
+
+void setPidFile(const std::string& filename) {
+  std::fstream pid_file(filename, std::ios::out | std::fstream::trunc);
+  pid_file << getpid() << std::endl;
+}
+
+int SetFdLimit(int maxFd) {
+  struct rlimit lim;
+
+  lim.rlim_cur = maxFd;
+  lim.rlim_max = maxFd;
+
+  return setrlimit(RLIMIT_NOFILE, &lim);
 }
 
 int main(int argc, char **argv) {
@@ -68,24 +108,37 @@ int main(int argc, char **argv) {
 
   switch(pid = fork()) {
     case -1:
+      // Error
       std::cerr << "Start daemon failed." << std::strerror(errno) << std::endl;
       return -1;
     case 0:
       // Child code
       clearChildEnv();
-      return headWork();
+      return monitorStart();
     default:
       // Parent code
       return 0;
   }
 }
 
-void setPidFile(const std::string& filename) {
-  std::fstream pid_file(filename, std::ios::out | std::fstream::trunc);
-  pid_file << getpid() << std::endl;
+void monitorForkError() {
+  writeToLog("[MONITOR] fork failed" + std::string(strerror(errno)));
 }
 
-int headWork() {
+bool processDaemonStatus(int status) {
+  switch (status) {
+    case CHILD_NEED_TERMINATE:
+      writeToLog("[MONITOR] Child stopped");
+      return false;
+    case CHILD_NEED_WORK:
+      writeToLog("[MONITOR] Child restart");
+      return true;
+    default:
+      return true;
+  }
+}
+
+int monitorStart() {
   pid_t pid;
   int status;
   bool need_start = true;
@@ -94,15 +147,7 @@ int headWork() {
 
   writeToLog("[MONITOR] Start...");
 
-  sigemptyset(&sigset);
-
-  sigaddset(&sigset, SIGTERM);
-  sigaddset(&sigset, SIGHUP);
-  sigaddset(&sigset, SIGINT);
-  sigaddset(&sigset, SIGQUIT);
-  sigaddset(&sigset, SIGCHLD);
-
-  sigprocmask(SIG_BLOCK, &sigset, NULL);
+  prepareSignals(sigset, {SIGTERM, SIGHUP, SIGINT, SIGQUIT, SIGCHLD});
 
   setPidFile(PID_FILE);
 
@@ -116,31 +161,26 @@ int headWork() {
 
     switch(pid) {
       case -1:
-        writeToLog("[MONITOR] fork failed" + std::string(strerror(errno)));
+        // Error
+        monitorForkError();
         break;
       case 0:
-        return mainWork();
-      default:
-        sigwaitinfo(&sigset, &siginfo);
+        // Child code
+        return daemonStart();
+      default: {
+        // Parent code
         switch (siginfo.si_signo) {
           case SIGCHLD:
             wait(&status);
             status = WEXITSTATUS(status);
-            switch (status) {
-              case CHILD_NEED_TERMINATE:
-                writeToLog("[MONITOR] Child stopped");
-                need_continue = false;
-                break;
-              case CHILD_NEED_WORK:
-                writeToLog("[MONITOR] Child restart");
-                break;
-            }
+            need_continue = processDaemonStatus(status);
             break;
           case SIGTERM:
           case SIGHUP:
           case SIGINT:
           case SIGQUIT:
-            writeToLog("[MONITOR] Signal " + std::string(strsignal(siginfo.si_signo)));
+            writeToLog("[MONITOR] Signal " +
+                       std::string(strsignal(siginfo.si_signo)));
             kill(pid, SIGTERM);
             status = 0;
             need_continue = false;
@@ -148,44 +188,39 @@ int headWork() {
           default:
             break;
         }
+      }
     }
   }
 
   writeToLog("[MONITOR] Stop");
 
-  unlink(PID_FILE.c_str());
+  unlink(PID_FILE);
   return status;
 }
 
-int SetFdLimit(int maxFd) {
-  struct rlimit lim;
-
-  lim.rlim_cur = maxFd;
-  lim.rlim_max = maxFd;
-
-  return setrlimit(RLIMIT_NOFILE, &lim);
-}
-
+// TODO: move it somewhere
+Server local(filepath);
 int initWorkThread() {
+  th = std::thread([](){
+    local.bind(5999);
+    local.listen();
+  });
   return 0;
 }
 
 void destroyWorkThread() {
-
+  local.stop();
+  // Wait when all sessions closed
+  th.join();
 }
 
-int mainWork() {
+int daemonStart() {
   // struct sigaction sigact;
   sigset_t sigset;
   int signo;
   int status;
 
-  sigemptyset(&sigset);
-  sigaddset(&sigset, SIGQUIT);
-  sigaddset(&sigset, SIGINT);
-  sigaddset(&sigset, SIGTERM);
-
-  sigprocmask(SIG_BLOCK, &sigset, NULL);
+  prepareSignals(sigset, {SIGQUIT, SIGINT, SIGTERM});
 
   SetFdLimit(FD_LIMIT);
 

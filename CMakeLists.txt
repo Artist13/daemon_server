@@ -16,15 +16,22 @@ target_sources(
   PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/client/client.cpp
 )
 
-add_executable(server)
+add_library(server)
 target_sources(
   server
   PUBLIC
-  PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/server/server.cpp
-  PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include/server/server.hpp
+  PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src/server/server.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/include/server/server.hpp
+)
+target_link_libraries(server PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(simple_server)
+target_sources(
+  simple_server
   PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/server/main.cpp
 )
-target_link_libraries (server ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(simple_server PUBLIC server)
 
 add_executable(daemon)
 target_sources(
@@ -32,3 +39,4 @@ target_sources(
   PUBLIC
   PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/server/daemon.cpp
 )
+target_link_libraries(daemon PUBLIC server ${CMAKE_THREAD_LIBS_INIT})
