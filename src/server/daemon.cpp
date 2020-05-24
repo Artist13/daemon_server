@@ -23,7 +23,6 @@ void writeToLog(std::string msg) {
   log << msg << std::endl;
 }
 
-
 void usage() {
   // TODO: need i this cfg?
   std::cout << "Usage: daemon filename.cfg" << std::endl;
@@ -194,8 +193,7 @@ int mainWork() {
 
   status = initWorkThread();
   if (!status) {
-    bool need_continue = true;
-    while (need_continue) {
+    while (true) {
       sigwait(&sigset, &signo);
       break;
     }
