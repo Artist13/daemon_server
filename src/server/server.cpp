@@ -60,6 +60,27 @@ int main(int argc, char **argv) {
   return 0;
 }
 
+std::string recv_line(int sockfd) {
+  char request[500];
+  int length;
+  std::string buffer;
+  int ret = recv(sockfd, &length, sizeof(length), 0);
+  if (ret != -1) {
+    int length = ntohl(length);
+    if (length == -1) {
+      return ""; 
+    }
+    if (length > 500) {
+      // split by chunks
+    }
+    printf("Ready %i bytes\n", length);
+    ret = recv(sockfd, request, length, 0);
+    request[length] = '\0';
+  }
+  return std::string(request);
+
+}
+
 void handle_connection(int sockfd, struct sockaddr_in *client_addr_ptr) {
   char *ptr, request[500], resource[500];
   int fd, length = 0;
@@ -69,21 +90,9 @@ void handle_connection(int sockfd, struct sockaddr_in *client_addr_ptr) {
   if (file.is_open()) {
 
     while (true) {
-      int ret = recv(sockfd, &length, sizeof(length), 0);
-      if (ret != -1) {
-        length = ntohl(length);
-        if (length == -1) {
-          break;
-        }
-        if (length > 500) {
-          // split by chunks
-        }
-        printf("Ready %i bytes\n", length);
-        ret = recv(sockfd, request, length, 0);
-        request[length] = '\0';
-        printf("Recv %s\n", request);
-        file.write(request, length);
-      }
+      std::string buffer = recv_line(sockfd);
+      printf("Recv %s\n", buffer.c_str());
+      file << request << std::endl;
     }
 
   }

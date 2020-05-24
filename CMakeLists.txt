@@ -17,3 +17,10 @@ target_sources(
   PUBLIC
   PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/server/server.cpp
 )
+
+add_executable(daemon)
+target_sources(
+  daemon
+  PUBLIC
+  PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/server/daemon.cpp
+)
