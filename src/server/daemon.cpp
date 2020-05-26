@@ -260,7 +260,7 @@ int daemonStart() {
 
   prepareSigActions(sigact, {SIGFPE, SIGILL, SIGSEGV, SIGBUS}, signal_error);
 
-  prepareSignals(sigset, {SIGQUIT, SIGINT, SIGTERM});
+  prepareSignals(sigset, {SIGQUIT, SIGHUP, SIGINT, SIGTERM});
 
   SetFdLimit(FD_LIMIT);
 
