@@ -13,7 +13,7 @@
 #include <thread>
 #include <vector>
 
-#include "server/server.hpp"
+#include "server/worker.hpp"
 
 static const std::string PID_FILE = "/var/run/my_daemon.pid";
 // daemon exit statuses
@@ -169,6 +169,7 @@ int monitorStart() {
         return daemonStart();
       default: {
         // Parent code
+        sigwaitinfo(&sigset, &siginfo);
         switch (siginfo.si_signo) {
           case SIGCHLD:
             wait(&status);
@@ -199,19 +200,21 @@ int monitorStart() {
 }
 
 // TODO: move it somewhere
+std::vector<Worker> workers;
+Worker serverWorker;
 Server local(filepath);
 int initWorkThread() {
-  th = std::thread([](){
-    local.bind(5999);
-    local.listen();
-  });
+  serverWorker.setUp(filepath);
+  serverWorker();
+  // workers.push_back(std::move(serverWorker));
   return 0;
 }
 
 void destroyWorkThread() {
-  local.stop();
-  // Wait when all sessions closed
-  th.join();
+  // for (auto& worker : workers) {
+  //   worker.tearDown();
+  // }
+  serverWorker.tearDown();
 }
 
 int daemonStart() {

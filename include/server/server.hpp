@@ -7,8 +7,9 @@
 
 class Server {
  public:
-  Server(std::string workDir);
+  Server(std::string workDir = "/");
   ~Server();
+  void setWorkDir(std::string workDir);
   void bind(short port);
   void listen();
   void stop();
