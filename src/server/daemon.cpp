@@ -2,20 +2,17 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <cstring>
-#include <cerrno>
 #include <sys/stat.h>
-#include <signal.h>
 #include <fstream>
 #include <string>
 #include <sys/resource.h>
 #include <wait.h>
 #include <string.h>
 #include <thread>
-#include <vector>
-#include <execinfo.h>
 #include <functional>
 
 #include "server/worker.hpp"
+#include "server/signalhelper.hpp"
 
 static const std::string PID_FILE = "/var/run/my_daemon.pid";
 // daemon exit statuses
@@ -44,17 +41,6 @@ void usage() {
 
 void unlink(const std::string& file) {
   unlink(file.c_str());
-}
-
-// helper func to prepare sigset
-void prepareSignals(sigset_t& sigset, const std::vector<int>& signals) {
-  sigemptyset(&sigset);
-
-  for (auto signal : signals) {
-    sigaddset(&sigset, signal);
-  }
-
-  sigprocmask(SIG_BLOCK, &sigset, NULL);
 }
 
 // prepare env after fork
@@ -264,20 +250,6 @@ static void signal_error(int sig, siginfo_t* si, void* ptr) {
 
   // завершим процесс с кодом требующим перезапуска
   exit(CHILD_NEED_WORK);
-}
-
-void prepareSigActions(struct sigaction& sigact, const std::vector<int>& signals, void (*handler)(int sig, siginfo_t* si, void* ptr)) {
-  // сигналы об ошибках в программе будут обрататывать более тщательно
-  // указываем что хотим получать расширенную информацию об ошибках
-  sigact.sa_flags = SA_SIGINFO;
-  // задаем функцию обработчик сигналов
-  sigact.sa_sigaction = handler;
-
-  sigemptyset(&sigact.sa_mask);
-  // установим наш обработчик на сигналы
-  for (auto sig : signals) {
-    sigaction(sig, &sigact, 0);  
-  }
 }
 
 int daemonStart() {
