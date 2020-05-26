@@ -59,7 +59,7 @@ int recv_line(int sockfd, std::string& buffer) {
     if (length > 500) {
       // split by chunks
     }
-    printf("Ready %i bytes\n", length);
+    // printf("Ready %i bytes\n", length);
     char *request = recv<char>(sockfd, length);
     if (request) {
       buffer = std::string(request, length);
@@ -102,6 +102,7 @@ Server::Server(std::string workDir)
 
   setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 
+  // set non blocking mode
   int flags = fcntl(m_sockfd, F_GETFL, 0);
   flags = flags | O_NONBLOCK;
   fcntl(m_sockfd, F_SETFL, flags);
@@ -162,10 +163,8 @@ void Server::listen() {
             accept(m_sockfd, (struct sockaddr *)&client_addr, &sin_size);
         if (new_sockfd < 0) {
           if (errno == EWOULDBLOCK || errno == EAGAIN) {
-            printf("No pending connections; sleeping for one second.\n");
-            // sleep(1);
           } else {
-            perror("error when accepting connection");
+            // error
             return;
           }
           break;

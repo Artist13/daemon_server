@@ -7,7 +7,12 @@
 
 class Worker {
  public:
-  Worker() {}
+  Worker(std::string dir = "/") {
+    setUp(dir);
+  }
+  ~Worker() {
+    tearDown();
+  }
   void setUp(std::string dir) {
     m_local.setWorkDir(std::move(dir));
   }

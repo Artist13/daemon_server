@@ -12,6 +12,8 @@
 #include <string.h>
 #include <thread>
 #include <vector>
+#include <execinfo.h>
+#include <functional>
 
 #include "server/worker.hpp"
 
@@ -30,6 +32,10 @@ static std::thread th;
 void writeToLog(std::string msg) {
   std::ofstream log(pathToLog, std::ios::out | std::ios::app);
   log << msg << std::endl;
+}
+
+void writeToLog(const char *msg) {
+  writeToLog(std::string(msg));
 }
 
 void usage() {
@@ -200,28 +206,87 @@ int monitorStart() {
 }
 
 // TODO: move it somewhere
-std::vector<Worker> workers;
-Worker serverWorker;
-Server local(filepath);
+std::vector<Worker *> workers;
 int initWorkThread() {
-  serverWorker.setUp(filepath);
-  serverWorker();
-  // workers.push_back(std::move(serverWorker));
+  auto serverWorker = new Worker(filepath);
+  (*serverWorker)();
+  workers.push_back(serverWorker);
   return 0;
 }
 
 void destroyWorkThread() {
-  // for (auto& worker : workers) {
-  //   worker.tearDown();
-  // }
-  serverWorker.tearDown();
+  for (auto worker : workers) {
+    delete worker;
+  }
+  // serverWorker.tearDown();
+}
+
+static void signal_error(int sig, siginfo_t* si, void* ptr) {
+  void* ErrorAddr;
+  void* Trace[16];
+  int x;
+  int TraceSize;
+  char** Messages;
+
+  // запишем в лог что за сигнал пришел
+  writeToLog("[DAEMON] Signal: " + std::string(strsignal(sig)));
+
+#if __WORDSIZE == 64  // если дело имеем с 64 битной ОС
+  // получим адрес инструкции которая вызвала ошибку
+  ErrorAddr = (void*)((ucontext_t*)ptr)->uc_mcontext.gregs[REG_RIP];
+#else
+  // получим адрес инструкции которая вызвала ошибку
+  ErrorAddr = (void*)((ucontext_t*)ptr)->uc_mcontext.gregs[REG_EIP];
+#endif
+
+  // произведем backtrace чтобы получить весь стек вызовов
+  TraceSize = backtrace(Trace, 16);
+  Trace[1] = ErrorAddr;
+
+  // получим расшифровку трасировки
+  Messages = backtrace_symbols(Trace, TraceSize);
+  if (Messages) {
+    writeToLog("== Backtrace ==");
+
+    // запишем в лог
+    for (x = 1; x < TraceSize; x++) {
+      writeToLog(Messages[x]);
+    }
+
+    writeToLog("== End Backtrace ==\n");
+    free(Messages);
+  }
+
+  writeToLog("[DAEMON] Stopped");
+
+  // остановим все рабочие потоки и корректно закроем всё что надо
+  destroyWorkThread();
+
+  // завершим процесс с кодом требующим перезапуска
+  exit(CHILD_NEED_WORK);
+}
+
+void prepareSigActions(struct sigaction& sigact, const std::vector<int>& signals, void (*handler)(int sig, siginfo_t* si, void* ptr)) {
+  // сигналы об ошибках в программе будут обрататывать более тщательно
+  // указываем что хотим получать расширенную информацию об ошибках
+  sigact.sa_flags = SA_SIGINFO;
+  // задаем функцию обработчик сигналов
+  sigact.sa_sigaction = handler;
+
+  sigemptyset(&sigact.sa_mask);
+  // установим наш обработчик на сигналы
+  for (auto sig : signals) {
+    sigaction(sig, &sigact, 0);  
+  }
 }
 
 int daemonStart() {
-  // struct sigaction sigact;
+  struct sigaction sigact;
   sigset_t sigset;
   int signo;
   int status;
+
+  prepareSigActions(sigact, {SIGFPE, SIGILL, SIGSEGV, SIGBUS}, signal_error);
 
   prepareSignals(sigset, {SIGQUIT, SIGINT, SIGTERM});
 
