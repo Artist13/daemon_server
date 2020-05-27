@@ -84,8 +84,6 @@ int SetFdLimit(int maxFd) {
 }
 
 int main(int argc, char **argv) {
-  pid_t pid;
-
   if (argc != 2) {
     usage();
     return -1;
@@ -96,7 +94,7 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  switch(pid = fork()) {
+  switch(fork()) {
     case -1:
       // Error
       std::cerr << "Start daemon failed." << std::strerror(errno) << std::endl;

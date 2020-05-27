@@ -21,9 +21,9 @@ class file_log_policy : public log_policy_interface {
 
  public:
   file_log_policy() : out_stream(new std::ofstream) {}
-  void open_ostream(const std::string& name);
-  void close_ostream();
-  void write(const std::string& msg);
+  void open_ostream(const std::string& name) override;
+  void close_ostream() override;
+  void write(const std::string& msg) override;
   ~file_log_policy();
 };
 
