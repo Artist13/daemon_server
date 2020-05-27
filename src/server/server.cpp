@@ -13,6 +13,8 @@
 #include <mutex>
 #include <fcntl.h>
 
+#include "server/logger.hpp"
+
 std::mutex readyMutex;
 
 template <typename T>
@@ -25,7 +27,7 @@ T recv(int sockfd) {
     if (ret > 0) {
       readed += ret;
     } else {
-      // error
+      ELOG("[SERVER] recieve error")
       return T();
     }
   }
@@ -42,7 +44,7 @@ T *recv(int sockfd, size_t size) {
     if (ret > 0) {
       readed += ret;
     } else {
-      // error
+      ELOG("[SERVER] recieve error")
       return nullptr;
     }
   }
@@ -59,7 +61,7 @@ int recv_line(int sockfd, std::string& buffer) {
     if (length > 500) {
       // split by chunks
     }
-    // printf("Ready %i bytes\n", length);
+    LOG("[SERVER] Ready ", length, " bytes");
     char *request = recv<char>(sockfd, length);
     if (request) {
       buffer = std::string(request, length);
@@ -68,7 +70,7 @@ int recv_line(int sockfd, std::string& buffer) {
       return -1;
     }
   } else {
-    // This is not error
+    LOG("[SERVER] Read empty string");
     buffer = "";
     return 0;
   }
@@ -85,7 +87,7 @@ void handle_connection(int sockfd, std::string output) {
     if (ret == -1) {
       break;
     } else {
-      printf("Recv %s\n", buffer.c_str());
+      LOG("[SERVER] Recv ", buffer);
       file << buffer << std::endl;
     }
   }
@@ -133,7 +135,7 @@ void Server::listen() {
   bool need_continue = readyToAccept;
 
   ::listen(m_sockfd, 20);
-  // TODO: make it non-blocking
+  
   fd_set master_set, working_set;
   struct timeval timeout;
 
@@ -150,7 +152,7 @@ void Server::listen() {
     sin_size = sizeof(struct sockaddr_in);
     int rc = select(m_sockfd + 1, &working_set, nullptr, nullptr, &timeout);
     if (rc == -1) {
-      // error
+      ELOG("[SERVER] Error in select")
       return;
     }
     if (rc == 0) {
@@ -164,7 +166,7 @@ void Server::listen() {
         if (new_sockfd < 0) {
           if (errno == EWOULDBLOCK || errno == EAGAIN) {
           } else {
-            // error
+            ELOG("[SERVER] Error in accept");
             return;
           }
           break;

@@ -9,6 +9,9 @@ find_package (Threads)
 
 include_directories(./include ./src)
 
+add_library(logger INTERFACE)
+target_include_directories(logger INTERFACE include/logger/)
+
 add_executable(client)
 target_sources(
   client
@@ -24,7 +27,7 @@ target_sources(
     ${CMAKE_CURRENT_LIST_DIR}/src/server/server.cpp
     ${CMAKE_CURRENT_LIST_DIR}/include/server/server.hpp
 )
-target_link_libraries(server PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(server PUBLIC ${CMAKE_THREAD_LIBS_INIT} INTERFACE logger)
 
 add_executable(simple_server)
 target_sources(
@@ -39,4 +42,6 @@ target_sources(
   PUBLIC
   PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/server/daemon.cpp
 )
-target_link_libraries(daemon PUBLIC server ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(daemon PUBLIC server ${CMAKE_THREAD_LIBS_INIT} INTERFACE logger)
+
+add_definitions(-DLOGGING_LEVEL_1)

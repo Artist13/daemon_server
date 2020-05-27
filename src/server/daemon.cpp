@@ -13,6 +13,7 @@
 
 #include "server/worker.hpp"
 #include "server/signalhelper.hpp"
+#include "server/logger.hpp"
 
 static const std::string PID_FILE = "/var/run/my_daemon.pid";
 // daemon exit statuses
@@ -20,20 +21,17 @@ const int CHILD_NEED_WORK = 1;
 const int CHILD_NEED_TERMINATE = 2;
 const int FD_LIMIT = 1024 * 10;
 
-static const std::string pathToLog = "/var/log/my_daemon.log";
 // path to output file
 static std::string filepath;
-// thread with server 
-static std::thread th;
 
-void writeToLog(std::string msg) {
-  std::ofstream log(pathToLog, std::ios::out | std::ios::app);
-  log << msg << std::endl;
-}
+// void writeToLog(std::string msg) {
+//   std::ofstream log(pathToLog, std::ios::out | std::ios::app);
+//   log << msg << std::endl;
+// }
 
-void writeToLog(const char *msg) {
-  writeToLog(std::string(msg));
-}
+// void writeToLog(const char *msg) {
+//   writeToLog(std::string(msg));
+// }
 
 void usage() {
   std::cout << "Usage: daemon filename.cfg" << std::endl;
@@ -48,11 +46,11 @@ void clearChildEnv() {
   umask(0);
   pid_t sid = setsid();
   if (sid < 0) {
-    writeToLog("setsid failed");
+    ELOG("setsid failed");
     exit(EXIT_FAILURE);
   }
   if (chdir("/")) {
-    writeToLog("chdir failed");
+    ELOG("chdir failed");
     exit(EXIT_FAILURE);
   }
   close(STDIN_FILENO);
@@ -113,17 +111,13 @@ int main(int argc, char **argv) {
   }
 }
 
-void monitorForkError() {
-  writeToLog("[MONITOR] fork failed" + std::string(strerror(errno)));
-}
-
 bool processDaemonStatus(int status) {
   switch (status) {
     case CHILD_NEED_TERMINATE:
-      writeToLog("[MONITOR] Child stopped");
+      LOG("[MONITOR] Child stopped");
       return false;
     case CHILD_NEED_WORK:
-      writeToLog("[MONITOR] Child restart");
+      LOG("[MONITOR] Child restart");
       return true;
     default:
       return true;
@@ -137,7 +131,7 @@ int monitorStart() {
   sigset_t sigset;
   siginfo_t siginfo;
 
-  writeToLog("[MONITOR] Start...");
+  LOG("[MONITOR] Start...");
 
   prepareSignals(sigset, {SIGTERM, SIGHUP, SIGINT, SIGQUIT, SIGCHLD});
 
@@ -154,7 +148,7 @@ int monitorStart() {
     switch(pid) {
       case -1:
         // Error
-        monitorForkError();
+        ELOG("[MONITOR] fork failed ", strerror(errno));
         break;
       case 0:
         // Child code
@@ -172,8 +166,7 @@ int monitorStart() {
           case SIGHUP:
           case SIGINT:
           case SIGQUIT:
-            writeToLog("[MONITOR] Signal " +
-                       std::string(strsignal(siginfo.si_signo)));
+            LOG("[MONITOR] Signal ", strsignal(siginfo.si_signo));
             kill(pid, SIGTERM);
             status = 0;
             need_continue = false;
@@ -185,7 +178,7 @@ int monitorStart() {
     }
   }
 
-  writeToLog("[MONITOR] Stop");
+  LOG("[MONITOR] Stop");
 
   unlink(PID_FILE);
   return status;
@@ -204,7 +197,6 @@ void destroyWorkThread() {
   for (auto worker : workers) {
     delete worker;
   }
-  // serverWorker.tearDown();
 }
 
 static void signal_error(int sig, siginfo_t* si, void* ptr) {
@@ -215,7 +207,7 @@ static void signal_error(int sig, siginfo_t* si, void* ptr) {
   char** Messages;
 
   // запишем в лог что за сигнал пришел
-  writeToLog("[DAEMON] Signal: " + std::string(strsignal(sig)));
+  LOG("[DAEMON] Signal: ", strsignal(sig));
 
 #if __WORDSIZE == 64  // если дело имеем с 64 битной ОС
   // получим адрес инструкции которая вызвала ошибку
@@ -232,18 +224,18 @@ static void signal_error(int sig, siginfo_t* si, void* ptr) {
   // получим расшифровку трасировки
   Messages = backtrace_symbols(Trace, TraceSize);
   if (Messages) {
-    writeToLog("== Backtrace ==");
+    LOG("== Backtrace ==");
 
     // запишем в лог
     for (x = 1; x < TraceSize; x++) {
-      writeToLog(Messages[x]);
+      LOG(Messages[x]);
     }
 
-    writeToLog("== End Backtrace ==\n");
+    LOG("== End Backtrace ==\n");
     free(Messages);
   }
 
-  writeToLog("[DAEMON] Stopped");
+  LOG("[DAEMON] Stopped");
 
   // остановим все рабочие потоки и корректно закроем всё что надо
   destroyWorkThread();
@@ -264,7 +256,7 @@ int daemonStart() {
 
   SetFdLimit(FD_LIMIT);
 
-  writeToLog("[DAEMON] Started");
+  LOG("[DAEMON] Started");
 
   status = initWorkThread();
   if (!status) {
@@ -274,8 +266,8 @@ int daemonStart() {
     }
     destroyWorkThread();
   } else {
-    writeToLog("[DAEMON] Create work thread failed");
+    LOG("[DAEMON] Create work thread failed");
   }
-  writeToLog("[DAEMON] Stopped");
+  LOG("[DAEMON] Stopped");
   return CHILD_NEED_TERMINATE;
 }
