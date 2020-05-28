@@ -91,8 +91,7 @@ void handle_connection(int sockfd, std::string output) {
   close(sockfd);
 }
 
-Server::Server(std::string workDir)
-    :m_workDir(workDir) {
+Server::Server(std::string workDir) {
   int yes = 1;
 
   m_sockfd = socket(PF_INET, SOCK_STREAM, 0);
@@ -103,10 +102,15 @@ Server::Server(std::string workDir)
   int flags = fcntl(m_sockfd, F_GETFL, 0);
   flags = flags | O_NONBLOCK;
   fcntl(m_sockfd, F_SETFL, flags);
+
+  setWorkDir(workDir);
 }
 
 void Server::setWorkDir(std::string workDir) {
   m_workDir = workDir;
+  if (m_workDir.back() != '/') {
+    m_workDir.push_back('/');
+  }
 }
 
 bool Server::isValid() const {
