@@ -5,6 +5,8 @@
 #include <vector>
 #include <thread>
 
+#include "server/logger.hpp"
+
 class Server {
  public:
   Server(std::string workDir = "/");
@@ -19,6 +21,7 @@ class Server {
   int m_sockfd;
   bool readyToAccept = true;
   std::vector<std::thread> m_threads;
+  std::thread m_main;
   std::string m_workDir;
 };
 

@@ -11,9 +11,9 @@
 #include <thread>
 #include <functional>
 
+#include "server/logger.hpp"
 #include "server/worker.hpp"
 #include "server/signalhelper.hpp"
-#include "server/logger.hpp"
 
 static const std::string PID_FILE = "/var/run/my_daemon.pid";
 // daemon exit statuses

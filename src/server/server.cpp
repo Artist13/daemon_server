@@ -13,8 +13,6 @@
 #include <mutex>
 #include <fcntl.h>
 
-#include "server/logger.hpp"
-
 std::mutex readyMutex;
 
 template <typename T>
@@ -57,9 +55,6 @@ int recv_line(int sockfd, std::string& buffer) {
     length = ntohl(length);
     if (length == -1) {
       return -1;
-    }
-    if (length > 500) {
-      // split by chunks
     }
     LOG("[SERVER] Ready ", length, " bytes");
     char *request = recv<char>(sockfd, length);
@@ -129,13 +124,12 @@ void Server::bind(short port) {
 }
 
 void Server::listen() {
-  socklen_t sin_size;
   struct sockaddr_in client_addr;
   int new_sockfd;
   bool need_continue = readyToAccept;
 
   ::listen(m_sockfd, 20);
-  
+
   fd_set master_set, working_set;
   struct timeval timeout;
 
@@ -143,49 +137,45 @@ void Server::listen() {
   FD_SET(m_sockfd, &master_set);
   timeout.tv_sec = 1;
   timeout.tv_usec = 0;
-  while (need_continue) {
-    readyMutex.lock();
-    need_continue = readyToAccept;
-    readyMutex.unlock();
-
+  do {
     memcpy(&working_set, &master_set, sizeof(working_set));
-    sin_size = sizeof(struct sockaddr_in);
     int rc = select(m_sockfd + 1, &working_set, nullptr, nullptr, &timeout);
     if (rc == -1) {
       ELOG("[SERVER] Error in select")
       return;
     }
-    if (rc == 0) {
-      // no connections;
-      continue;
-    }
-    if (FD_ISSET(m_sockfd, &working_set)) {
-      while (true) {
-        int new_sockfd =
-            accept(m_sockfd, (struct sockaddr *)&client_addr, &sin_size);
-        if (new_sockfd < 0) {
-          if (errno == EWOULDBLOCK || errno == EAGAIN) {
-          } else {
-            ELOG("[SERVER] Error in accept");
-            return;
+    if (rc != 0) {
+      if (FD_ISSET(m_sockfd, &working_set)) {
+        while (true) {
+          int new_sockfd = accept(m_sockfd, nullptr, nullptr);
+          if (new_sockfd < 0) {
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
+            } else {
+              ELOG("[SERVER] Error in accept");
+              return;
+            }
+            break;
           }
-          break;
+          m_threads.push_back(std::thread(handle_connection, new_sockfd,
+                                          m_workDir + "out.txt"));
         }
-        m_threads.push_back(
-            std::thread(handle_connection, new_sockfd, m_workDir + "out.txt"));
       }
     }
+    readyMutex.lock();
+    need_continue = readyToAccept;
+    readyMutex.unlock();
+  } while (need_continue);
+  for (auto &th : m_threads) {
+    if (th.joinable()) th.join();
   }
+  m_threads.clear();
 }
 
 void Server::stop() {
   readyMutex.lock();
   readyToAccept = false;
   readyMutex.unlock();
-  
-  for (auto &th : m_threads) {
-    th.join();
-  }
+  if (m_main.joinable()) m_main.join();
 }
 
 Server::~Server() {

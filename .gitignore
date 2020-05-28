@@ -1,5 +1,5 @@
-./debug/*
-./release/*
-./build/*
-.vscode/*
+debug/**
+release/**
+build/**
+.vscode/**
 **.swp

@@ -3,7 +3,7 @@
 
 #include "logger/log.hpp"
 
-static logging::logger<logging::file_log_policy> log_inst("/var/log/my_daemon.log");
+extern logging::logger<logging::file_log_policy> log_inst;
 
 #ifdef LOGGING_LEVEL_1
 

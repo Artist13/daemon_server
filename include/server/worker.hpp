@@ -18,7 +18,7 @@ class Worker {
   }
   void tearDown() {
     m_local.stop();
-    m_th.join();
+    if (m_th.joinable()) m_th.join();
   }
   void operator() () {
     m_th = std::thread([&]() {
